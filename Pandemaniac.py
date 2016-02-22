@@ -37,11 +37,12 @@ class Graph():
         self.adj_pruned={}
         #load adjacency list
         f=open(filename,'r')
-        self.adj=json.load(f)
+        self.adj_old=json.load(f)
+        self.adj = dict()
         #convert to int
-        for key,value in self.adj.iteritems():
+        for key,value in self.adj_old.iteritems():
             self.adj[int(key)]=map(int,value)
-            self.adj.pop(key)
+            #self.adj.pop(key)
         #create nxgraph
         self.nxgraph=nx.Graph(self.adj)
         #get info from filename
