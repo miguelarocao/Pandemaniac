@@ -29,14 +29,15 @@ def main():
     myGraph.checkOutputFile("output")
     myGraph.checkOutputFile("output2")'''
 
-    myGraph=Graph('graphs/2.5.1.json')
-    seeds=myGraph.getSeeds("MaxDegree",0.3)
-    seeds2=myGraph.getSeeds("MaxDegree",0.3)
-    seeds3=myGraph.getSeeds("MaxDegree",0.3)
-    seeds4=myGraph.getSeeds("MaxDegree",0.3)
+    myGraph=Graph('graphs/2.10.32.json')
+    max_seeds=myGraph.getSeeds("MaxDegree",1)
+    killer_seeds=myGraph.getSeeds("DegreeKiller")
+    print max_seeds
+    print killer_seeds
     #myGraph.outputSeeds('output',seeds)
-    #print myGraph.simulateSeeds({"Strat1":seeds,"Strat2":seeds2},True)
-    print myGraph.competeSeeds([seeds,seeds2,seeds3,seeds4])
+    print myGraph.simulateSeeds({"HighDeg":max_seeds,"Killer":killer_seeds},True)
+    #print myGraph.competeSeeds([seeds,seeds2,seeds3,seeds4])
+    #Graph.plotResults('graphs/2.10.12.json','past_games/2.10.12-EngineersAtNetwork.json',0)
 
 class Graph():
     """Class to hold graph data"""
@@ -59,13 +60,15 @@ class Graph():
         self.numSeeds=int((filename.split('/')[-1]).split('.')[1])
         self.numRounds=50
 
-    def getSeeds(self,mode,arguments):
+    def getSeeds(self,mode,arguments=[]):
         """Generate seeds based on mode"""
         if mode=="MaxDegree":
             #print "Generating seeds by maximum degree."
             return self.genSeedsMaxDegree(arguments)
+        if mode=="DegreeKiller":
+            return self.genSeedsDegreeKiller()
         else:
-            raise("Invalid input to getSeeds()!")
+            raise NameError("Invalid input to getSeeds()!")
         return seeds
 
     def getAdj(self,node):
@@ -164,14 +167,16 @@ class Graph():
 
         for match in matches:
             results=sim.run(self.adj,dict(match))[1]
-            print results
+            #print results
             #sort by number of seeds
             sorted_results=sorted(results,key=results.get,reverse=True)
+            #print results
             #increment scores
             for i in range(len(sorted_results)):
                 scores[int(sorted_results[i])]+=scoring[i]
 
-        print scores
+        #print list_seeds
+        #print scores
         return list_seeds[np.argmax(scores)]
 
     def simulateSeeds(self,dict_seeds,plot=False):
@@ -180,34 +185,46 @@ class Graph():
         graph: adjacency dictionary
         Returns seed results. Uses provided simulator."""
 
+        if len(dict_seeds)!=self.numPlayers:
+            raise AssertionError("Invalid Input! Not enough player seeds.")
+
         mapping,results=sim.run(self.adj,dict_seeds)
 
         if plot:
             self.drawGraph(mapping,dict_seeds.keys())
 
+        #check
+        if sum(results.values())!=len(self.adj):
+            print "Warning: Mismatching number of nodes in results."
+
         return results
 
-    def drawGraph(self,seed_mappings,strat_names):
+    def drawGraph(self,seed_mappings,strat_names,show_node_numbers=False):
         """Draws graph based on seed mappings."""
 
-        color_list=['r','b','g','c','m','y','w']
+        color_list=['r','b','g','c','m','y','k']
         color_names=['Red','Blue','Green','Cyan','Purple','Yellow','White']
-        node_colors=[None]*len(seed_mappings)
-
+        node_colors=['w']*len(self.adj)
+        node_labels={}
+        for i in range(len(node_colors)):
+            #generate labels
+            node_labels[i]=str(i)
         #get colors
         for key,value in seed_mappings.iteritems():
             try:
                 node_colors[key]=color_list[strat_names.index(value)]
-
             except ValueError:
-                node_colors[key]='k'
+                node_colors[key]='w'
 
         print "Legend: "
         for i in range(len(strat_names)):
             print "\t"+strat_names[i]+" is "+color_names[i]
 
         pos=nx.spring_layout(self.nxgraph)
-        nx.draw(self.nxgraph,pos,node_color=node_colors,node_size=80)
+        if show_node_numbers:
+            nx.draw(self.nxgraph,pos,node_color=node_colors,node_size=80,labels=node_labels,with_labels=True)
+        else:
+            nx.draw(self.nxgraph,pos,node_color=node_colors,node_size=80)
 
         plt.show()
 
@@ -240,6 +257,41 @@ class Graph():
 
         return seeds[:self.numSeeds]
 
+    def genSeedsDegreeKiller(self):
+        """Generates seeds in order to beat maximum degeree.
+           May not work well when dealing with >2 players."""
+
+        deg_seeds=self.genSeedsMaxDegree(1)
+
+        #get seeds options
+
+        adj_options=[]
+        #get three times as many high degree seeds
+        old_num=self.numSeeds
+        self.numSeeds=self.numSeeds+3
+        deg_options=self.genSeedsMaxDegree(1)
+        self.numSeeds=old_num
+        #get nodes near high degree seeds
+        for seed in deg_seeds:
+            adj_options=adj_options+self.adj[seed]
+        seed_options=list(set(adj_options) & set(deg_options))
+
+        killer_sets=list(itertools.combinations(seed_options,self.numSeeds))
+
+        check_count=0
+        for killer in killer_sets:
+            check_count+=1
+            prefix=str(check_count)+"/"+str(len(killer_sets))
+            winner=self.competeSeeds([deg_seeds,list(killer)])
+            if cmp(winner,deg_seeds)==0:
+                print prefix+": Max Degree Won"
+            else:
+                print prefix+": Killer won"
+                return list(winner)
+
+        print "Couldn't find better seeds!"
+        return deg_seeds
+
     ###PUBLIC METHODS
 
     @staticmethod
@@ -250,5 +302,41 @@ class Graph():
         f=open(filename,'w')
         f.close()
         return
+
+    @staticmethod
+    def plotResults(graph_file,result_file,game_round):
+        """Plots results using graph file and result file.
+        Game round specifies rount out of 50 rounds"""
+
+        if game_round>=50:
+            raise AssertionError("plotResults() Error: Invalid game_round input.")
+
+        #set up graph
+        plotGraph=Graph(graph_file)
+
+        #import result_file
+        f=open(result_file,'r')
+        results=json.load(f)
+        seed_dict={}
+        plot_seeds={}
+        #for simulation
+        for key,value in results.iteritems():
+            seed_dict[str(key)]=map(int,value[-1])
+
+        #to display initial seeds
+        for key,value in seed_dict.iteritems():
+            for node in value:
+                try:
+                    plot_seeds.pop(int(node))
+                except KeyError:
+                    plot_seeds[int(node)]=str(key)
+
+        print seed_dict
+
+        print "Showing initial seeds"
+        plotGraph.drawGraph(plot_seeds,results.keys())
+        print "Showing final results"
+        plotGraph.simulateSeeds(seed_dict,True)
+
 if __name__ == '__main__':
     main()
