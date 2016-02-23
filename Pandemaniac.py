@@ -29,7 +29,7 @@ def main():
     myGraph.checkOutputFile("output")
     myGraph.checkOutputFile("output2")'''
 
-    myGraph=Graph('graphs/2.10.32.json')
+    myGraph=Graph('graphs/2.10.33.json')
     max_seeds=myGraph.getSeeds("MaxDegree",1)
     killer_seeds=myGraph.getSeeds("DegreeKiller")
     print max_seeds
@@ -283,7 +283,7 @@ class Graph():
             check_count+=1
             prefix=str(check_count)+"/"+str(len(killer_sets))
             winner=self.competeSeeds([deg_seeds,list(killer)])
-            if cmp(winner,deg_seeds)==0:
+            if cmp(sorted(deg_seeds),sorted(winner))==0:
                 print prefix+": Max Degree Won"
             else:
                 print prefix+": Killer won"
