@@ -14,12 +14,12 @@ import networkx as nx
 import numpy as np
 import random
 import pprint
+import sim
+import matplotlib.pyplot as plt
+import itertools
 
 def main():
-    myGraph=Graph('2.5.1.json')
-    seeds=myGraph.getSeeds("MaxDegree",1)
-    myGraph.outputSeeds('output',seeds)
-
+    '''
     Graph.newOutputFile("output2")
     for i in range(myGraph.numRounds):
         seeds=myGraph.getSeeds("MaxDegree",0.5)
@@ -27,7 +27,16 @@ def main():
 
 
     myGraph.checkOutputFile("output")
-    myGraph.checkOutputFile("output2")
+    myGraph.checkOutputFile("output2")'''
+
+    myGraph=Graph('graphs/2.5.1.json')
+    seeds=myGraph.getSeeds("MaxDegree",0.3)
+    seeds2=myGraph.getSeeds("MaxDegree",0.3)
+    seeds3=myGraph.getSeeds("MaxDegree",0.3)
+    seeds4=myGraph.getSeeds("MaxDegree",0.3)
+    #myGraph.outputSeeds('output',seeds)
+    #print myGraph.simulateSeeds({"Strat1":seeds,"Strat2":seeds2},True)
+    print myGraph.competeSeeds([seeds,seeds2,seeds3,seeds4])
 
 class Graph():
     """Class to hold graph data"""
@@ -46,8 +55,8 @@ class Graph():
         #create nxgraph
         self.nxgraph=nx.Graph(self.adj)
         #get info from filename
-        self.numPlayers=int(filename.split('.')[0])
-        self.numSeeds=int(filename.split('.')[1])
+        self.numPlayers=int((filename.split('/')[-1]).split('.')[0])
+        self.numSeeds=int((filename.split('/')[-1]).split('.')[1])
         self.numRounds=50
 
     def getSeeds(self,mode,arguments):
@@ -133,6 +142,75 @@ class Graph():
         print str(filename)+": Valid output file"
         return True
 
+    def competeSeeds(self,list_seeds):
+        """Competes each seeding against each other.
+        input: list of list of seeds
+        Returns best seed. Uses provided simulator."""
+
+        scoring=[20,15,12,9,6,4,2,1,0]
+
+        #warning!
+        if len(list_seeds)<self.numPlayers:
+            print "Number of seeds is smaller than number of players! Adding random."
+            for i in range(self.numPlayers-len(list_seeds)):
+                list_seeds.append(list(np.random.randint(len(self.adj),size=self.numSeeds)))
+
+        labels=map(str,range(len(list_seeds))) #since only care about being unique
+        scores=[0]*len(list_seeds)
+        dict_seeds=dict(itertools.izip(labels,list_seeds))
+
+        #competes seeds in tournament style base on size of graph
+        matches=itertools.combinations(dict_seeds.iteritems(),self.numPlayers)
+
+        for match in matches:
+            results=sim.run(self.adj,dict(match))[1]
+            print results
+            #sort by number of seeds
+            sorted_results=sorted(results,key=results.get,reverse=True)
+            #increment scores
+            for i in range(len(sorted_results)):
+                scores[int(sorted_results[i])]+=scoring[i]
+
+        print scores
+        return list_seeds[np.argmax(scores)]
+
+    def simulateSeeds(self,dict_seeds,plot=False):
+        """Competes each seeding against each other.
+        dict_seeds: key=name, value=list of seeds
+        graph: adjacency dictionary
+        Returns seed results. Uses provided simulator."""
+
+        mapping,results=sim.run(self.adj,dict_seeds)
+
+        if plot:
+            self.drawGraph(mapping,dict_seeds.keys())
+
+        return results
+
+    def drawGraph(self,seed_mappings,strat_names):
+        """Draws graph based on seed mappings."""
+
+        color_list=['r','b','g','c','m','y','w']
+        color_names=['Red','Blue','Green','Cyan','Purple','Yellow','White']
+        node_colors=[None]*len(seed_mappings)
+
+        #get colors
+        for key,value in seed_mappings.iteritems():
+            try:
+                node_colors[key]=color_list[strat_names.index(value)]
+
+            except ValueError:
+                node_colors[key]='k'
+
+        print "Legend: "
+        for i in range(len(strat_names)):
+            print "\t"+strat_names[i]+" is "+color_names[i]
+
+        pos=nx.spring_layout(self.nxgraph)
+        nx.draw(self.nxgraph,pos,node_color=node_colors,node_size=80)
+
+        plt.show()
+
     ###SEED GENERATION METHODS
 
     def genSeedsMaxDegree(self,p):
@@ -163,12 +241,6 @@ class Graph():
         return seeds[:self.numSeeds]
 
     ###PUBLIC METHODS
-    @staticmethod
-    def competeSeeds(list_seeds):
-        """Competes each seeding against each other.
-        Returns winner as index.
-        Uses provided simulator."""
-        return
 
     @staticmethod
     def newOutputFile(filename):

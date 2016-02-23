@@ -96,7 +96,7 @@ def run_simulation(adj_list, node_mappings):
     # of the epidemic.
     generation += 1
 
-  return get_result(node_mappings.keys(), node_color)
+  return [node_color,get_result(node_mappings.keys(), node_color)]
 
 
 def init(color_nodes, node_color):
