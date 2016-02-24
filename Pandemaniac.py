@@ -21,6 +21,9 @@ import matplotlib.pyplot as plt
 import itertools
 import math
 import time
+from sklearn import cluster
+
+#NUM_CLUSTERS = 8
 
 def main():
     '''
@@ -36,16 +39,17 @@ def main():
     #timer
     start=time.time()
 
-    filename='2.10.32'
+    filename='2.10.33'
     myGraph=Graph('graphs/'+filename+'.json')
 
     #comparison
-    myGraph.numSeeds=12
-    max_seeds=myGraph.getSeeds("MaxDegree",1)
-    myGraph.numSeeds=10
+    temp = myGraph.numSeeds
+    myGraph.numSeeds = int(temp*1.2)
+    max_seeds = myGraph.getSeeds("MaxDegree",1)
+    myGraph.numSeeds = temp
 
     #killer with advatange
-    killer_seeds=myGraph.getSeeds("DegreeKiller",1.2)
+    killer_seeds = myGraph.getSeeds("ClustDegreeKiller",1.2)
 
     print "Simulation took: "+str(time.time()-start)+" seconds."
 
@@ -78,6 +82,7 @@ class Graph():
         #get info from filename
         self.numPlayers=int((filename.split('/')[-1]).split('.')[0])
         self.numSeeds=int((filename.split('/')[-1]).split('.')[1])
+        self.num_clusters = 5#self.numSeeds
         self.numRounds=50
 
     def getSeeds(self,mode,arguments=[]):
@@ -87,6 +92,8 @@ class Graph():
             return self.genSeedsMaxDegree(arguments,0)
         elif mode=="DegreeKiller":
             return self.genSeedsDegreeKiller(arguments)
+        elif mode=="ClustDegreeKiller":
+            return self.genSeedsClustDegreeKiller(arguments)
         elif mode=="BwDegree":
             return self.genSeedsMaxDegree(arguments,1)
         else:
@@ -361,6 +368,117 @@ class Graph():
         print "Best score: "+str(best_score)
         return best_killer
 
+
+    def genSeedsClustDegreeKiller(self,advantage=1):
+        """Generates seeds in order to beat maximum degeree.
+           Advantage is a multiplier which gives enemy more seeds nodes.
+           May not work well when dealing with >2 players."""
+
+        old_num=self.numSeeds
+        self.numSeeds=int(self.numSeeds*advantage)
+        deg_seeds=self.genSeedsMaxDegree(1,0)
+        self.numSeeds=old_num
+        clust = cluster.SpectralClustering(n_clusters=self.num_clusters,
+                                              eigen_solver='arpack',
+                                              affinity="precomputed")
+
+        adjacency_matrix = nx.adjacency_matrix(self.nxgraph)
+        y = clust.fit_predict(adjacency_matrix)
+        self.num_clusters = max(y) + 1
+        max_degrees = [0]*self.num_clusters
+        #max_degree_node = [0]*self.num_clusters
+        avg_degrees = [0]*self.num_clusters
+        sum_degrees = [0]*self.num_clusters
+        counts = [0]*self.num_clusters
+
+        seed_options = []
+
+        for i in range(0, len(y)):
+            deg = len(self.adj[i])            
+            counts[y[i]] += 1
+            sum_degrees[y[i]] += deg
+            if max_degrees[y[i]] < deg:
+                max_degrees[y[i]] = deg
+                #max_degree_node[y[i]] = i
+                
+        for i in range(0, self.num_clusters):
+            avg_degrees[i] = sum_degrees[i]/counts[i]
+
+        second_largest_avg_deg = 0
+        for i in range(0, self.num_clusters):
+            #removing sparse graphs from consideration            
+            #if avg_degrees[i] == np.median(avg_degrees):
+                #counts[i] = 0
+            #We only select the top two densest clusters
+            if avg_degrees[i] != max(avg_degrees):
+                if second_largest_avg_deg < avg_degrees[i]:
+                    second_largest_avg_deg = avg_degrees[i]
+
+        for i in range(0, self.num_clusters):
+            #removing sparse graphs from consideration            
+            if avg_degrees[i] < second_largest_avg_deg:
+                counts[i] = 0
+
+        #calculate the classes used by the degree based seeds
+        deg_seeds_y = [0]*len(deg_seeds)
+        for i in range(0, len(deg_seeds)):
+            deg_seeds_y[i] = y[deg_seeds[i]]
+
+        numMax = self.numSeeds + 3
+        seeds=[None]*numMax
+        deg=[0]*numMax
+        
+        #get seeds options
+        for i in range(0, len(y)):
+            #Select from large clusters only
+            if counts[y[i]] == max(counts):
+                #fill seeds
+                curr_deg=len(self.adj[i])
+                for j in range(numMax):
+                    if curr_deg>deg[j]:
+                        deg.insert(j,curr_deg)
+                        seeds.insert(j,i)
+                        break
+    
+                seeds=seeds[:numMax]
+                deg=deg[:numMax]
+
+        seed_options = seeds
+
+        killer_sets=list(itertools.combinations(seed_options,self.numSeeds))
+
+        check_count=0
+        best_score=0
+        best_killer=None
+        killer_found=False
+        for killer in killer_sets:
+            check_count+=1
+            prefix=str(check_count)+"/"+str(len(killer_sets))
+
+            #generate dict
+            list_seeds=[deg_seeds,list(killer)]
+            labels=map(str,range(len(list_seeds))) #since only care about being unique
+            dict_seeds=dict(itertools.izip(labels,list_seeds))
+
+            results=self.simulateSeeds(dict_seeds)
+            if results['0']>results['1']:
+                if check_count%10==0:
+                    print prefix+": Max Degree Won with "+str(results['0'])
+            else:
+                print prefix+": Killer won with "+str(results['1'])
+                killer_found=True
+
+            #in case best seed can't be found
+            if results['1']>best_score:
+                best_score=results['1']
+                best_killer=killer
+
+            if check_count>(len(killer_sets)/2) and killer_found:
+                return best_killer
+
+        print "Best score: "+str(best_score)
+        return best_killer
+        
     ###PUBLIC METHODS
 
     @staticmethod
