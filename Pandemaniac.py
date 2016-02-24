@@ -11,6 +11,8 @@
 
 import json
 import networkx as nx
+import math
+import operator
 import numpy as np
 import random
 import pprint
@@ -18,6 +20,7 @@ import sim
 import matplotlib.pyplot as plt
 import itertools
 import math
+import time
 
 def main():
     '''
@@ -30,17 +33,31 @@ def main():
     myGraph.checkOutputFile("output")
     myGraph.checkOutputFile("output2")'''
 
-    myGraph=Graph('graphs/2.10.33.json')
+    #timer
+    start=time.time()
+
+    filename='2.10.32'
+    myGraph=Graph('graphs/'+filename+'.json')
+
+    #comparison
     myGraph.numSeeds=12
     max_seeds=myGraph.getSeeds("MaxDegree",1)
     myGraph.numSeeds=10
+
+    #killer with advatange
     killer_seeds=myGraph.getSeeds("DegreeKiller",1.2)
+
+    print "Simulation took: "+str(time.time()-start)+" seconds."
+
     print max_seeds
     print killer_seeds
     #myGraph.outputSeeds('output',seeds)
-    print myGraph.simulateSeeds({"HighDeg":max_seeds,"Killer":killer_seeds},True)
-    #print myGraph.competeSeeds([seeds,seeds2,seeds3,seeds4])
-    #Graph.simResults('graphs/2.10.32.json','past_games/2.10.32-EngineersAtNetwork.json',0,killer_seeds)
+    #print myGraph.simulateSeeds({"HighDeg":max_seeds,"Killer":killer_seeds},True)
+    #print myGraph.competeSeeds([seeds,seeds2,seeds3,seeds4])[0]
+    #killer_seeds=[4, 10, 107, 13, 110, 179, 174, 57, 59, 61] #33
+    #killer_seeds=[1, 2, 6, 40, 201, 80, 58, 59, 93, 159] #32
+    Graph.simResults('graphs/'+filename+'.json','past_games/'+filename+'-EngineersAtNetwork.json',range(50),killer_seeds)
+
 
 class Graph():
     """Class to hold graph data"""
@@ -62,12 +79,6 @@ class Graph():
         self.numPlayers=int((filename.split('/')[-1]).split('.')[0])
         self.numSeeds=int((filename.split('/')[-1]).split('.')[1])
         self.numRounds=50
-        k_val = int(2000/math.sqrt(len(self.adj)))
-        if k_val > len(self.adj):
-            self.bw_node = nx.betweenness_centrality(self.nxgraph)
-        else:
-            self.bw_node = nx.betweenness_centrality(self.nxgraph, k = k_val )
-
 
     def getSeeds(self,mode,arguments=[]):
         """Generate seeds based on mode"""
@@ -158,7 +169,7 @@ class Graph():
     def competeSeeds(self,list_seeds):
         """Competes each seeding against each other.
         input: list of list of seeds
-        Returns best seed. Uses provided simulator."""
+        Returns best seed and score. Uses provided simulator."""
 
         scoring=[20,15,12,9,6,4,2,1,0]
 
@@ -204,8 +215,8 @@ class Graph():
             self.drawGraph(mapping,dict_seeds.keys())
 
         #check
-        if sum(results.values())!=len(self.adj):
-            print "Warning: Mismatching number of nodes in results."
+        #if sum(results.values())!=len(self.adj):
+        #    print "Warning: Mismatching number of nodes in results."
 
         return results
 
@@ -239,15 +250,23 @@ class Graph():
         plt.show()
 
     ###SEED GENERATION METHODS
-
-    def genSeedsMaxDegree(self,p,retmore):
+    #if retmore then choose onthe basis of betweeness as well
+    def genSeedsMaxDegree(self,p,bwness):
         """Generate seeds based on maximum degree.
         Optional input argument sets randomization. 0<p<1"""
 
         numSeeds = self.numSeeds
 
-        if retmore:
+        if bwness:
             numSeeds = numSeeds*1.5
+
+        if bwness:
+            k_val = int(2000/math.sqrt(len(self.adj)))
+            if k_val > len(self.adj):
+                bw_node = nx.betweenness_centrality(self.nxgraph)
+            else:
+                bw_node = nx.betweenness_centrality(self.nxgraph, k = k_val )
+
 
         numMax=int(self.numSeeds/(1.0*p))
 
@@ -266,9 +285,9 @@ class Graph():
             seeds=seeds[:numMax]
             deg=deg[:numMax]
 
-        if retmore:
+        if bwness:
             numMax=int(self.numSeeds/(1.0*p))
-            dict_bw = self.bw_node
+            dict_bw = bw_node
             seeds_degree = seeds
             seeds = dict()
             for node in seeds_degree:
@@ -311,18 +330,36 @@ class Graph():
         killer_sets=list(itertools.combinations(seed_options,self.numSeeds))
 
         check_count=0
+        best_score=0
+        best_killer=None
+        killer_found=False
         for killer in killer_sets:
             check_count+=1
             prefix=str(check_count)+"/"+str(len(killer_sets))
-            winner=self.competeSeeds([deg_seeds,list(killer)])
-            if cmp(sorted(deg_seeds),sorted(winner))==0:
-                print prefix+": Max Degree Won"
-            else:
-                print prefix+": Killer won"
-                return list(winner)
 
-        print "Couldn't find better seeds!"
-        return deg_seeds
+            #generate dict
+            list_seeds=[deg_seeds,list(killer)]
+            labels=map(str,range(len(list_seeds))) #since only care about being unique
+            dict_seeds=dict(itertools.izip(labels,list_seeds))
+
+            results=self.simulateSeeds(dict_seeds)
+            if results['0']>results['1']:
+                if check_count%10==0:
+                    print prefix+": Max Degree Won with "+str(results['0'])
+            else:
+                print prefix+": Killer won with "+str(results['1'])
+                killer_found=True
+
+            #in case best seed can't be found
+            if results['1']>best_score:
+                best_score=results['1']
+                best_killer=killer
+
+            if check_count>(len(killer_sets)/2) and killer_found:
+                return best_killer
+
+        print "Best score: "+str(best_score)
+        return best_killer
 
     ###PUBLIC METHODS
 
@@ -338,42 +375,67 @@ class Graph():
     @staticmethod
     def simResults(graph_file,result_file,game_round,my_seeds=None):
         """Plots results using graph file and result file.
+        If len(game_round)>1 no plotting will occur.
         Game round specifies rount out of 50 rounds"""
 
         teamname="EngineersAtNetwork"
 
-        if game_round>=50:
-            raise AssertionError("plotResults() Error: Invalid game_round input.")
+        if len(game_round)!=1:
+            print "simResult():Multi iteration, no plotting."
+
+        if my_seeds:
+            print "simResult():Using custom nodes!"
 
         #set up graph
-        plotGraph=Graph(graph_file)
+        simGraph=Graph(graph_file)
 
         #import result_file
         f=open(result_file,'r')
         results=json.load(f)
-        seed_dict={}
-        plot_seeds={}
+
+        #dict for scoring
+        score_dict={}
+
         #for simulation
-        for key,value in results.iteritems():
-            seed_dict[str(key)]=map(int,value[-1])
-            if my_seeds and key==teamname:
-                print "Using custom nodes"
-                seed_dict[str(key)]=my_seeds
-
-        #to display initial seeds
-        for key,value in seed_dict.iteritems():
-            for node in value:
+        for r in game_round:
+            seed_dict={}
+            plot_seeds={}
+            for key,value in results.iteritems():
+                seed_dict[str(key)]=map(int,value[r])
+                if my_seeds and key==teamname:
+                    seed_dict[str(key)]=my_seeds
                 try:
-                    plot_seeds.pop(int(node))
+                    score_dict[str(key)]
                 except KeyError:
-                    plot_seeds[int(node)]=str(key)
+                    score_dict[str(key)]=0
 
-        print seed_dict
+            #to display initial seeds
+            for key,value in seed_dict.iteritems():
+                for node in value:
+                    try:
+                        plot_seeds.pop(int(node))
+                    except KeyError:
+                        plot_seeds[int(node)]=str(key)
 
-        print "Showing initial seeds"
-        plotGraph.drawGraph(plot_seeds,results.keys())
-        print "Showing final results"
-        print plotGraph.simulateSeeds(seed_dict,True)
+            if len(game_round)==1:
+                print "Showing initial seeds"
+                simGraph.drawGraph(plot_seeds,results.keys())
+                print "Showing final results"
+                print simGraph.simulateSeeds(seed_dict,True)
+            else:
+                output=simGraph.simulateSeeds(seed_dict,False)
+                print "Round "+str(r)+" Node Totals:",
+                print output
+                if output[output.keys()[0]]>output[output.keys()[1]]:
+                    score_dict[output.keys()[0]]+=1
+                elif output[output.keys()[0]]<output[output.keys()[1]]:
+                    score_dict[output.keys()[1]]+=1
+                else:
+                    score_dict[output.keys()[0]]+=1
+                    score_dict[output.keys()[1]]+=1
+
+        print "TOTAL WINS: ",
+        print score_dict
 
 if __name__ == '__main__':
     main()
