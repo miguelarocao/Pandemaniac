@@ -11,6 +11,8 @@
 
 import json
 import networkx as nx
+import math 
+import operator
 import numpy as np
 import random
 import pprint
@@ -59,12 +61,6 @@ class Graph():
         self.numPlayers=int((filename.split('/')[-1]).split('.')[0])
         self.numSeeds=int((filename.split('/')[-1]).split('.')[1])
         self.numRounds=50
-        k_val = int(2000/math.sqrt(len(self.adj)))
-        if k_val > len(self.adj):
-            self.bw_node = nx.betweenness_centrality(self.nxgraph)
-        else:
-            self.bw_node = nx.betweenness_centrality(self.nxgraph, k = k_val )
-
 
     def getSeeds(self,mode,arguments=[]):
         """Generate seeds based on mode"""
@@ -236,15 +232,23 @@ class Graph():
         plt.show()
 
     ###SEED GENERATION METHODS
-
-    def genSeedsMaxDegree(self,p,retmore):
+    #if retmore then choose onthe basis of betweeness as well
+    def genSeedsMaxDegree(self,p,bwness):
         """Generate seeds based on maximum degree.
         Optional input argument sets randomization. 0<p<1"""
 
         numSeeds = self.numSeeds
 
-        if retmore:
+        if bwness:
             numSeeds = numSeeds*1.5
+            
+        if bwness:
+            k_val = int(2000/math.sqrt(len(self.adj)))
+            if k_val > len(self.adj):
+                bw_node = nx.betweenness_centrality(self.nxgraph)
+            else:
+                bw_node = nx.betweenness_centrality(self.nxgraph, k = k_val )
+
 
         numMax=int(self.numSeeds/(1.0*p))
 
@@ -263,9 +267,9 @@ class Graph():
             seeds=seeds[:numMax]
             deg=deg[:numMax]
             
-        if retmore:
+        if bwness:
             numMax=int(self.numSeeds/(1.0*p))
-            dict_bw = self.bw_node
+            dict_bw = bw_node
             seeds_degree = seeds
             seeds = dict()
             for node in seeds_degree:
