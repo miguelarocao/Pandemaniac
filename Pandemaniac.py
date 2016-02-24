@@ -29,7 +29,7 @@ def main():
     myGraph.checkOutputFile("output")
     myGraph.checkOutputFile("output2")'''
 
-    myGraph=Graph('graphs/2.10.33.json')
+    myGraph=Graph('graphs/2.10.32.json')
     max_seeds=myGraph.getSeeds("MaxDegree",1)
     killer_seeds=myGraph.getSeeds("DegreeKiller")
     print max_seeds
@@ -59,17 +59,24 @@ class Graph():
         self.numPlayers=int((filename.split('/')[-1]).split('.')[0])
         self.numSeeds=int((filename.split('/')[-1]).split('.')[1])
         self.numRounds=50
+        k_val = int(2000/math.sqrt(len(self.adj)))
+        if k_val > len(self.adj):
+            self.bw_node = nx.betweenness_centrality(self.nxgraph)
+        else:
+            self.bw_node = nx.betweenness_centrality(self.nxgraph, k = k_val )
+
 
     def getSeeds(self,mode,arguments=[]):
         """Generate seeds based on mode"""
         if mode=="MaxDegree":
             #print "Generating seeds by maximum degree."
-            return self.genSeedsMaxDegree(arguments)
-        if mode=="DegreeKiller":
+            return self.genSeedsMaxDegree(arguments,0)
+        elif mode=="DegreeKiller":
             return self.genSeedsDegreeKiller()
+        elif mode=="BwDegree":
+            return self.genSeedsMaxDegree(arguments,1)
         else:
             raise NameError("Invalid input to getSeeds()!")
-        return seeds
 
     def getAdj(self,node):
         """returns adjacency of node"""
@@ -230,9 +237,14 @@ class Graph():
 
     ###SEED GENERATION METHODS
 
-    def genSeedsMaxDegree(self,p):
+    def genSeedsMaxDegree(self,p,retmore):
         """Generate seeds based on maximum degree.
         Optional input argument sets randomization. 0<p<1"""
+
+        numSeeds = self.numSeeds
+
+        if retmore:
+            numSeeds = numSeeds*1.5
 
         numMax=int(self.numSeeds/(1.0*p))
 
@@ -250,6 +262,19 @@ class Graph():
 
             seeds=seeds[:numMax]
             deg=deg[:numMax]
+            
+        if retmore:
+            numMax=int(self.numSeeds/(1.0*p))
+            dict_bw = self.bw_node
+            seeds_degree = seeds
+            seeds = dict()
+            for node in seeds_degree:
+                value = dict_bw.get(node)
+                key = node
+                seeds[key] = value
+            seeds_fin = dict(sorted(seeds.iteritems(), key=operator.itemgetter(1), reverse=True)[:numMax])
+            seeds = seeds_fin.keys()
+            
 
         #shuffle
         if p!=1:
@@ -261,7 +286,7 @@ class Graph():
         """Generates seeds in order to beat maximum degeree.
            May not work well when dealing with >2 players."""
 
-        deg_seeds=self.genSeedsMaxDegree(1)
+        deg_seeds=self.genSeedsMaxDegree(1,0)
 
         #get seeds options
 
@@ -269,7 +294,7 @@ class Graph():
         #get three times as many high degree seeds
         old_num=self.numSeeds
         self.numSeeds=self.numSeeds+3
-        deg_options=self.genSeedsMaxDegree(1)
+        deg_options=self.genSeedsMaxDegree(1,0)
         self.numSeeds=old_num
         #get nodes near high degree seeds
         for seed in deg_seeds:
