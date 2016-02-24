@@ -17,6 +17,7 @@ import pprint
 import sim
 import matplotlib.pyplot as plt
 import itertools
+import math
 
 def main():
     '''
@@ -29,15 +30,17 @@ def main():
     myGraph.checkOutputFile("output")
     myGraph.checkOutputFile("output2")'''
 
-    myGraph=Graph('graphs/2.10.32.json')
+    myGraph=Graph('graphs/2.10.33.json')
+    myGraph.numSeeds=12
     max_seeds=myGraph.getSeeds("MaxDegree",1)
-    killer_seeds=myGraph.getSeeds("DegreeKiller")
+    myGraph.numSeeds=10
+    killer_seeds=myGraph.getSeeds("DegreeKiller",1.2)
     print max_seeds
     print killer_seeds
     #myGraph.outputSeeds('output',seeds)
     print myGraph.simulateSeeds({"HighDeg":max_seeds,"Killer":killer_seeds},True)
     #print myGraph.competeSeeds([seeds,seeds2,seeds3,seeds4])
-    #Graph.plotResults('graphs/2.10.12.json','past_games/2.10.12-EngineersAtNetwork.json',0)
+    #Graph.simResults('graphs/2.10.32.json','past_games/2.10.32-EngineersAtNetwork.json',0,killer_seeds)
 
 class Graph():
     """Class to hold graph data"""
@@ -72,7 +75,7 @@ class Graph():
             #print "Generating seeds by maximum degree."
             return self.genSeedsMaxDegree(arguments,0)
         elif mode=="DegreeKiller":
-            return self.genSeedsDegreeKiller()
+            return self.genSeedsDegreeKiller(arguments)
         elif mode=="BwDegree":
             return self.genSeedsMaxDegree(arguments,1)
         else:
@@ -262,7 +265,7 @@ class Graph():
 
             seeds=seeds[:numMax]
             deg=deg[:numMax]
-            
+
         if retmore:
             numMax=int(self.numSeeds/(1.0*p))
             dict_bw = self.bw_node
@@ -274,7 +277,7 @@ class Graph():
                 seeds[key] = value
             seeds_fin = dict(sorted(seeds.iteritems(), key=operator.itemgetter(1), reverse=True)[:numMax])
             seeds = seeds_fin.keys()
-            
+
 
         #shuffle
         if p!=1:
@@ -282,20 +285,24 @@ class Graph():
 
         return seeds[:self.numSeeds]
 
-    def genSeedsDegreeKiller(self):
+    def genSeedsDegreeKiller(self,advantage=1):
         """Generates seeds in order to beat maximum degeree.
+           Advantage is a multiplier which gives enemy more seeds nodes.
            May not work well when dealing with >2 players."""
 
+        old_num=self.numSeeds
+        self.numSeeds=int(self.numSeeds*advantage)
         deg_seeds=self.genSeedsMaxDegree(1,0)
+        self.numSeeds=old_num
 
         #get seeds options
 
         adj_options=[]
         #get three times as many high degree seeds
-        old_num=self.numSeeds
-        self.numSeeds=self.numSeeds+3
+        self.numSeeds=len(deg_seeds)+3
         deg_options=self.genSeedsMaxDegree(1,0)
         self.numSeeds=old_num
+
         #get nodes near high degree seeds
         for seed in deg_seeds:
             adj_options=adj_options+self.adj[seed]
@@ -329,9 +336,11 @@ class Graph():
         return
 
     @staticmethod
-    def plotResults(graph_file,result_file,game_round):
+    def simResults(graph_file,result_file,game_round,my_seeds=None):
         """Plots results using graph file and result file.
         Game round specifies rount out of 50 rounds"""
+
+        teamname="EngineersAtNetwork"
 
         if game_round>=50:
             raise AssertionError("plotResults() Error: Invalid game_round input.")
@@ -347,6 +356,9 @@ class Graph():
         #for simulation
         for key,value in results.iteritems():
             seed_dict[str(key)]=map(int,value[-1])
+            if my_seeds and key==teamname:
+                print "Using custom nodes"
+                seed_dict[str(key)]=my_seeds
 
         #to display initial seeds
         for key,value in seed_dict.iteritems():
@@ -361,7 +373,7 @@ class Graph():
         print "Showing initial seeds"
         plotGraph.drawGraph(plot_seeds,results.keys())
         print "Showing final results"
-        plotGraph.simulateSeeds(seed_dict,True)
+        print plotGraph.simulateSeeds(seed_dict,True)
 
 if __name__ == '__main__':
     main()
