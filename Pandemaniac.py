@@ -39,28 +39,41 @@ def main():
     #timer
     start=time.time()
 
-    filename='2.10.33'
+    filename='6.10.6'
     myGraph=Graph('graphs/'+filename+'.json')
 
     #comparison
-    temp = myGraph.numSeeds
+    '''temp = myGraph.numSeeds
     myGraph.numSeeds = int(temp*1.2)
     max_seeds = myGraph.getSeeds("MaxDegree",1)
-    myGraph.numSeeds = temp
+    myGraph.numSeeds = temp'''
 
     #killer with advatange
-    killer_seeds = myGraph.getSeeds("ClustDegreeKiller",1.2)
+    killer_seed_sets = myGraph.getSeeds("DegreeKiller",[1,True,False])
+
+    print len(killer_seed_sets)
 
     print "Simulation took: "+str(time.time()-start)+" seconds."
 
-    print max_seeds
-    print killer_seeds
+    #writing to file
+    #check if file exists, delete if it does
+    f_output='output'
+    try:
+        Graph.newOutputFile(f_output)
+    except OSError:
+        pass
+    for killer_seed in killer_seed_sets:
+        print killer_seed
+        myGraph.outputSeeds(f_output,killer_seed,not_repeat=False)
+    myGraph.checkOutputFile(f_output)
+
+
     #myGraph.outputSeeds('output',seeds)
     #print myGraph.simulateSeeds({"HighDeg":max_seeds,"Killer":killer_seeds},True)
     #print myGraph.competeSeeds([seeds,seeds2,seeds3,seeds4])[0]
     #killer_seeds=[4, 10, 107, 13, 110, 179, 174, 57, 59, 61] #33
     #killer_seeds=[1, 2, 6, 40, 201, 80, 58, 59, 93, 159] #32
-    Graph.simResults('graphs/'+filename+'.json','past_games/'+filename+'-EngineersAtNetwork.json',range(50),killer_seeds)
+    #Graph.simResults('graphs/'+filename+'.json','past_games/'+filename+'-EngineersAtNetwork.json',range(50),killer_seeds)
 
 
 class Graph():
@@ -91,7 +104,7 @@ class Graph():
             #print "Generating seeds by maximum degree."
             return self.genSeedsMaxDegree(arguments,0)
         elif mode=="DegreeKiller":
-            return self.genSeedsDegreeKiller(arguments)
+            return self.genSeedsDegreeKiller(arguments[0],arguments[1],arguments[2])
         elif mode=="ClustDegreeKiller":
             return self.genSeedsClustDegreeKiller(arguments)
         elif mode=="BwDegree":
@@ -129,7 +142,7 @@ class Graph():
         self.adj_pruned=[]
         return
 
-    def outputSeeds(self,filename,seeds,repeat=True):
+    def outputSeeds(self,filename,seeds,not_repeat=True):
         """Prints seed to output file. Seeds is list to output.
         repeat=True will repeat the seeds numRounds times. Use if intending to only generate seeds once.
         repeat=False will append the seeds to an existing file. Use if intending to generate multiple sets of seeds.
@@ -137,7 +150,7 @@ class Graph():
 
         out=[str(seed)+"\n" for seed in seeds]
 
-        if repeat:
+        if not_repeat:
             #print "Outputting repeated seeds to "+filename
             with open (filename,'w') as f:
                 for i in range(self.numRounds):
@@ -213,8 +226,8 @@ class Graph():
         graph: adjacency dictionary
         Returns seed results. Uses provided simulator."""
 
-        if len(dict_seeds)!=self.numPlayers:
-            raise AssertionError("Invalid Input! Not enough player seeds.")
+        #if len(dict_seeds)!=self.numPlayers:
+            #raise AssertionError("Invalid Input! Not enough player seeds.")
 
         mapping,results=sim.run(self.adj,dict_seeds)
 
@@ -311,7 +324,7 @@ class Graph():
 
         return seeds[:self.numSeeds]
 
-    def genSeedsDegreeKiller(self,advantage=1):
+    def genSeedsDegreeKiller(self,advantage=1,randomize=False,no_sim=False):
         """Generates seeds in order to beat maximum degeree.
            Advantage is a multiplier which gives enemy more seeds nodes.
            May not work well when dealing with >2 players."""
@@ -336,6 +349,14 @@ class Graph():
 
         killer_sets=list(itertools.combinations(seed_options,self.numSeeds))
 
+        if no_sim:
+            random.shuffle(killer_sets)
+            return killer_sets[:self.numRounds]
+
+        #if randomize then use append list
+        if randomize:
+            best_killer_list=[]
+
         check_count=0
         best_score=0
         best_killer=None
@@ -356,17 +377,26 @@ class Graph():
             else:
                 print prefix+": Killer won with "+str(results['1'])
                 killer_found=True
+                best_killer_list.append(killer)
 
-            #in case best seed can't be found
+            #update "best so far"
             if results['1']>best_score:
                 best_score=results['1']
                 best_killer=killer
 
-            if check_count>(len(killer_sets)/2) and killer_found:
+            if randomize and len(best_killer_list)==self.numRounds:
+                return best_killer_list
+
+            if not randomize and check_count>(len(killer_sets)/2) and killer_found:
                 return best_killer
+
+        #finished
+        if randomize:
+            return best_killer_list+killer_sets[-(self.numRounds-len(best_killer_list)):]
 
         print "Best score: "+str(best_score)
         return best_killer
+
 
 
     def genSeedsClustDegreeKiller(self,advantage=1):
@@ -394,19 +424,19 @@ class Graph():
         seed_options = []
 
         for i in range(0, len(y)):
-            deg = len(self.adj[i])            
+            deg = len(self.adj[i])
             counts[y[i]] += 1
             sum_degrees[y[i]] += deg
             if max_degrees[y[i]] < deg:
                 max_degrees[y[i]] = deg
                 #max_degree_node[y[i]] = i
-                
+
         for i in range(0, self.num_clusters):
             avg_degrees[i] = sum_degrees[i]/counts[i]
 
         second_largest_avg_deg = 0
         for i in range(0, self.num_clusters):
-            #removing sparse graphs from consideration            
+            #removing sparse graphs from consideration
             #if avg_degrees[i] == np.median(avg_degrees):
                 #counts[i] = 0
             #We only select the top two densest clusters
@@ -415,7 +445,7 @@ class Graph():
                     second_largest_avg_deg = avg_degrees[i]
 
         for i in range(0, self.num_clusters):
-            #removing sparse graphs from consideration            
+            #removing sparse graphs from consideration
             if avg_degrees[i] < second_largest_avg_deg:
                 counts[i] = 0
 
@@ -427,7 +457,7 @@ class Graph():
         numMax = self.numSeeds + 3
         seeds=[None]*numMax
         deg=[0]*numMax
-        
+
         #get seeds options
         for i in range(0, len(y)):
             #Select from large clusters only
@@ -439,7 +469,7 @@ class Graph():
                         deg.insert(j,curr_deg)
                         seeds.insert(j,i)
                         break
-    
+
                 seeds=seeds[:numMax]
                 deg=deg[:numMax]
 
@@ -478,7 +508,7 @@ class Graph():
 
         print "Best score: "+str(best_score)
         return best_killer
-        
+
     ###PUBLIC METHODS
 
     @staticmethod
