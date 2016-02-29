@@ -1,13 +1,6 @@
-#-------------------------------------------------------------------------------
-# Name:        module1
-# Purpose:
-#
-# Author:      Miguel
-#
-# Created:     20/02/2016
-# Copyright:   (c) Miguel 2016
-# Licence:     <your licence>
-#-------------------------------------------------------------------------------
+#Engineers at Network
+#Akshta Athawale, Mannat Singh and Miguel Aroca-Ouellette
+#02/29/2016
 
 import json
 import networkx as nx
@@ -26,15 +19,6 @@ from sklearn import cluster
 #NUM_CLUSTERS = 8
 
 def main():
-    '''
-    Graph.newOutputFile("output2")
-    for i in range(myGraph.numRounds):
-        seeds=myGraph.getSeeds("MaxDegree",0.5)
-        myGraph.outputSeeds('output2',seeds,False)
-
-
-    myGraph.checkOutputFile("output")
-    myGraph.checkOutputFile("output2")'''
 
     #timer
     start=time.time()
@@ -71,8 +55,6 @@ def main():
     #myGraph.outputSeeds('output',seeds)
     #print myGraph.simulateSeeds({"HighDeg":max_seeds,"Killer":killer_seeds},True)
     #print myGraph.competeSeeds([seeds,seeds2,seeds3,seeds4])[0]
-    #killer_seeds=[4, 10, 107, 13, 110, 179, 174, 57, 59, 61] #33
-    #killer_seeds=[1, 2, 6, 40, 201, 80, 58, 59, 93, 159] #32
     #Graph.simResults('graphs/'+filename+'.json','past_games/'+filename+'-EngineersAtNetwork.json',range(50),killer_seeds)
 
 
@@ -119,10 +101,6 @@ class Graph():
     def getDeg(self,node):
         """returns degree of node"""
         return len(self.adj[node])
-
-    def getEigen(self):
-        """returns eigenvalues of graph"""
-        pass
 
     def pruneByDeg(self,degree):
         """prunes graph based on <degree, stores pruned nodes"""
@@ -272,7 +250,7 @@ class Graph():
     ###SEED GENERATION METHODS
     #if retmore then choose onthe basis of betweeness as well
     def genSeedsMaxDegree(self,p,bwness):
-        """Generate seeds based on maximum degree.
+        """Generate seeds based on maximum degree. Also handles Betweenness.
         Optional input argument sets randomization. 0<p<1"""
 
         numSeeds = self.numSeeds
@@ -400,7 +378,7 @@ class Graph():
 
 
     def genSeedsClustDegreeKiller(self,advantage=1):
-        """Generates seeds in order to beat maximum degeree.
+        """Generates seeds in order to beat maximum degeree and utilizes clustering.
            Advantage is a multiplier which gives enemy more seeds nodes.
            May not work well when dealing with >2 players."""
 
